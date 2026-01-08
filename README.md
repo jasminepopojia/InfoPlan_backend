@@ -22,71 +22,62 @@
 - 📚 **内容匹配**：自动匹配相关笔记到学习步骤
 - 🎯 **个性化推荐**：根据用户ID列表获取相关笔记并生成规划
 
-## 🏗️ 项目结构
-InfoPlan_Backend/
-├── apis/ # API接口模块
-│ ├── xhs_pc_apis.py # 小红书PC端API
-│ └── xhs_creator_apis.py # 小红书创作者中心API
-├── xhs_utils/ # 工具模块
-│ ├── xhs_util.py # 核心工具函数
-│ ├── note_fetcher.py # 笔记获取工具
-│ ├── data_util.py # 数据处理工具
-│ └── common_util.py # 通用工具
-├── static/ # 静态资源（JS加密文件）
-├── datas/ # 数据存储目录
-│ ├── excel_datas/ # Excel数据
-│ └── media_datas/ # 媒体文件
-├── XHS_Learing_Agent/ # AI学习规划模块
-│ ├── model_service/ # 模型服务
-│ ├── data_providers/ # 数据提供者
-│ ├── config.py # 配置文件
-│ ├── model_service_server.py # 模型服务（服务器版）
-│ └── model_service_local.py # 模型服务（本地版）
-├── api_server.py # 爬虫API服务
-├── main.py # 爬虫主程序
-├── test_spider_api.py # API测试脚本
-├── requirements.txt # Python依赖
-└── README.md # 项目文档
-
-
 ## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.8+
+- Python 3.11+
 - Node.js (用于执行JS加密脚本)
 - 小红书Cookie（需要登录获取）
 
 ### 安装依赖
 
 # 安装Python依赖
+```
 pip install -r requirements.txt
+```
 
 # 安装Node.js依赖（如果需要）
-npm install### 配置环境变量
+```
+npm install
+```
+
+### 配置环境变量
 
 创建 `.env` 文件：
+```
+COOKIES=your_xiaohongshu_cookies_here
+```
 
-COOKIES=your_xiaohongshu_cookies_here### 启动爬虫服务
+### 启动爬虫服务
 
 # 启动API服务（默认端口5001）
+
 python api_server.py服务启动后，访问 `http://localhost:5001/health` 检查服务状态。
 
 ### 启动模型服务
 
 # 设置环境变量
+```
 export SPIDER_API_URL=http://localhost:5001
-export MODEL_PATH=/path/to/your/model
+
+export MODEL_PATH=/path/to/your/model 
+
 export MODEL_SERVICE_PORT=5002
+```
 
 # 启动模型服务
+```
 cd XHS_Learing_Agent
-python model_service_server.py## 📖 API文档
+python model_service_server.py
+```
+
+## 📖 API文档
 
 ### 爬虫服务API（端口5001）
 
 #### 1. 搜索用户
-ttp
+```
 POST /api/search/user
 Content-Type: application/json
 
@@ -94,7 +85,11 @@ Content-Type: application/json
   "query": "美食",
   "page": 1,
   "proxies": {}  // 可选
-}**响应示例：**
+}
+```
+
+**响应示例：**
+```
 {
   "success": true,
   "msg": "成功",
@@ -102,16 +97,22 @@ Content-Type: application/json
     "users": [...],
     "has_more": true
   }
-}#### 2. 批量搜索用户
-ttp
+}
+```
+
+#### 2. 批量搜索用户
+```
 POST /api/search/user/batch
 Content-Type: application/json
 
 {
   "query": "美食",
   "require_num": 15
-}#### 3. 获取用户笔记
+}
+```
 
+#### 3. 获取用户笔记
+```
 POST /api/users/notes
 Content-Type: application/json
 
@@ -119,25 +120,37 @@ Content-Type: application/json
   "user_ids": ["user_id1", "user_id2"],
   "max_users": 5,
   "notes_per_user": 5
-}#### 4. 获取单个用户笔记
+}
+```
+#### 4. 获取单个用户笔记
 
-GET /api/user/notes/{user_id}?limit=20#### 5. 健康检查
+```
+GET /api/user/notes/{user_id}?limit=20
+```
 
+#### 5. 健康检查
+
+```
 GET /health
+```
+
 ### 模型服务API（端口5002）
 
 #### 生成学习规划
-tp
+```
 POST /api/learning/plan
 Content-Type: application/json
-
 {
   "goal": "我想学习AI agent的简单开发",
   "user_ids": ["user_id1", "user_id2"],
   "max_users": 5,
   "notes_per_user": 5,
   "debug": false
-}**响应示例：**
+}
+```
+
+**响应示例：**
+```
 {
   "success": true,
   "msg": "学习规划生成成功",
@@ -156,39 +169,43 @@ Content-Type: application/json
       "total_steps": 5
     }
   }
-}## 🔧 使用示例
+}
+```
+
+## 🔧 使用示例
 
 ### Python代码示例
-on
-import requests
 
 # 搜索用户
+
+```
 response = requests.post('http://localhost:5001/api/search/user', json={
     'query': '美食',
     'page': 1
 })
 users = response.json()
+```
 
 # 获取用户笔记
+```
 response = requests.post('http://localhost:5001/api/users/notes', json={
     'user_ids': ['user_id1', 'user_id2'],
     'max_users': 5,
     'notes_per_user': 5
 })
 notes = response.json()
+```
 
 # 生成学习规划
+```
 response = requests.post('http://localhost:5002/api/learning/plan', json={
     'goal': '我想学习Python爬虫',
     'user_ids': ['user_id1', 'user_id2'],
     'max_users': 5,
     'notes_per_user': 5
 })
-plan = response.json()### 命令行测试
-
-# 测试爬虫API
-python test_spider_api.py## 🐳 Docker部署
-
+plan = response.json()
+```
 
 ### 爬虫服务配置
 

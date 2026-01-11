@@ -62,14 +62,89 @@ def handle_user_info(data, user_id):
         'tags': tags,
     }
 
+# def handle_note_info(data):
+#     note_id = data['id']
+#     note_url = data['url']
+#     note_type = data['note_card']['type']
+#     if note_type == 'normal':
+#         note_type = '图集'
+#     else:
+#         note_type = '视频'
+#     user_id = data['note_card']['user']['user_id']
+#     home_url = f'https://www.xiaohongshu.com/user/profile/{user_id}'
+#     nickname = data['note_card']['user']['nickname']
+#     avatar = data['note_card']['user']['avatar']
+#     title = data['note_card']['title']
+#     if title.strip() == '':
+#         title = f'无标题'
+#     desc = data['note_card']['desc']
+#     liked_count = data['note_card']['interact_info']['liked_count']
+#     collected_count = data['note_card']['interact_info']['collected_count']
+#     comment_count = data['note_card']['interact_info']['comment_count']
+#     share_count = data['note_card']['interact_info']['share_count']
+#     image_list_temp = data['note_card']['image_list']
+#     image_list = []
+#     for image in image_list_temp:
+#         try:
+#             image_list.append(image['info_list'][1]['url'])
+#             # success, msg, img_url = XHS_Apis.get_note_no_water_img(image['info_list'][1]['url'])
+#             # image_list.append(img_url)
+#         except:
+#             pass
+#     if note_type == '视频':
+#         video_cover = image_list[0]
+#         video_addr = 'https://sns-video-bd.xhscdn.com/' + data['note_card']['video']['consumer']['origin_video_key']
+#         # success, msg, video_addr = XHS_Apis.get_note_no_water_video(note_id)
+#     else:
+#         video_cover = None
+#         video_addr = None
+#     tags_temp = data['note_card']['tag_list']
+#     tags = []
+#     for tag in tags_temp:
+#         try:
+#             tags.append(tag['name'])
+#         except:
+#             pass
+#     upload_time = timestamp_to_str(data['note_card']['time'])
+#     if 'ip_location' in data['note_card']:
+#         ip_location = data['note_card']['ip_location']
+#     else:
+#         ip_location = '未知'
+#     return {
+#         'note_id': note_id,
+#         'note_url': note_url,
+#         'note_type': note_type,
+#         'user_id': user_id,
+#         'home_url': home_url,
+#         'nickname': nickname,
+#         'avatar': avatar,
+#         'title': title,
+#         'desc': desc,
+#         'liked_count': liked_count,
+#         'collected_count': collected_count,
+#         'comment_count': comment_count,
+#         'share_count': share_count,
+#         'video_cover': video_cover,
+#         'video_addr': video_addr,
+#         'image_list': image_list,
+#         'tags': tags,
+#         'upload_time': upload_time,
+#         'ip_location': ip_location,
+#     }
+
 def handle_note_info(data):
+    """
+    处理笔记信息，支持图集和视频两种类型
+    """
     note_id = data['id']
-    note_url = data['url']
+    note_url = data.get('url', '')
     note_type = data['note_card']['type']
+    
     if note_type == 'normal':
         note_type = '图集'
     else:
         note_type = '视频'
+    
     user_id = data['note_card']['user']['user_id']
     home_url = f'https://www.xiaohongshu.com/user/profile/{user_id}'
     nickname = data['note_card']['user']['nickname']
@@ -82,35 +157,121 @@ def handle_note_info(data):
     collected_count = data['note_card']['interact_info']['collected_count']
     comment_count = data['note_card']['interact_info']['comment_count']
     share_count = data['note_card']['interact_info']['share_count']
-    image_list_temp = data['note_card']['image_list']
+    
+    # 处理图片列表
+    image_list_temp = data['note_card'].get('image_list', [])
     image_list = []
     for image in image_list_temp:
         try:
-            image_list.append(image['info_list'][1]['url'])
-            # success, msg, img_url = XHS_Apis.get_note_no_water_img(image['info_list'][1]['url'])
-            # image_list.append(img_url)
-        except:
+            # 优先使用 info_list[1] (WB_DFT)，如果没有则使用 info_list[0] (WB_PRV)
+            if 'info_list' in image and len(image['info_list']) > 0:
+                # 查找 WB_DFT 格式的图片
+                for info in image['info_list']:
+                    if info.get('image_scene') == 'WB_DFT':
+                        image_list.append(info['url'])
+                        break
+                else:
+                    # 如果没有 WB_DFT，使用第一个可用的
+                    image_list.append(image['info_list'][0]['url'])
+            elif 'url_default' in image and image['url_default']:
+                image_list.append(image['url_default'])
+        except Exception as e:
+            logger.warning(f"处理图片时出错: {e}")
             pass
+    
+    # 处理视频相关数据
+    video_cover = None
+    video_addr = None
+    video_duration = None
+    video_streams = []  # 存储所有可用的视频流信息
+    
     if note_type == '视频':
-        video_cover = image_list[0]
-        video_addr = 'https://sns-video-bd.xhscdn.com/' + data['note_card']['video']['consumer']['origin_video_key']
-        # success, msg, video_addr = XHS_Apis.get_note_no_water_video(note_id)
-    else:
-        video_cover = None
-        video_addr = None
-    tags_temp = data['note_card']['tag_list']
+        try:
+            video_data = data['note_card'].get('video', {})
+            
+            # 获取视频封面
+            if image_list:
+                video_cover = image_list[0]
+            elif 'image' in video_data:
+                # 尝试从 video.image 获取封面
+                thumbnail_fileid = video_data['image'].get('thumbnail_fileid', '')
+                if thumbnail_fileid:
+                    video_cover = f"https://sns-webpic-qc.xhscdn.com/{thumbnail_fileid}"
+            
+            # 获取视频时长
+            if 'capa' in video_data and 'duration' in video_data['capa']:
+                video_duration = video_data['capa']['duration']  # 单位：秒
+            
+            # 获取视频链接（优先选择最高质量的）
+            if 'media' in video_data and 'stream' in video_data['media']:
+                stream_data = video_data['media']['stream']
+                
+                # 按优先级选择：h265 > h264 > av1 > h266
+                video_streams_list = []
+                
+                # 收集所有可用的视频流
+                for codec_type in ['h265', 'h264', 'av1', 'h266']:
+                    if codec_type in stream_data and stream_data[codec_type]:
+                        for stream in stream_data[codec_type]:
+                            if 'master_url' in stream:
+                                video_streams_list.append({
+                                    'url': stream['master_url'],
+                                    'backup_urls': stream.get('backup_urls', []),
+                                    'codec': codec_type,
+                                    'quality': stream.get('quality_type', 'Unknown'),
+                                    'width': stream.get('width', 0),
+                                    'height': stream.get('height', 0),
+                                    'size': stream.get('size', 0),
+                                    'duration': stream.get('duration', 0),
+                                    'bitrate': stream.get('avg_bitrate', 0)
+                                })
+                
+                # 选择最高质量的视频（优先选择分辨率最高的）
+                if video_streams_list:
+                    # 按分辨率排序，选择最高的
+                    video_streams_list.sort(key=lambda x: x['width'] * x['height'], reverse=True)
+                    best_stream = video_streams_list[0]
+                    video_addr = best_stream['url']
+                    video_streams = video_streams_list  # 保存所有可用的流
+                    
+                    logger.info(f"选择视频流: {best_stream['codec']}, 分辨率: {best_stream['width']}x{best_stream['height']}, 质量: {best_stream['quality']}")
+                else:
+                    logger.warning("未找到可用的视频流")
+            
+            # 兼容旧的数据格式（如果新格式没有找到）
+            if not video_addr and 'consumer' in video_data:
+                try:
+                    origin_video_key = video_data['consumer'].get('origin_video_key', '')
+                    if origin_video_key:
+                        video_addr = 'https://sns-video-bd.xhscdn.com/' + origin_video_key
+                except:
+                    pass
+                    
+        except Exception as e:
+            logger.error(f"处理视频数据时出错: {e}", exc_info=True)
+            video_cover = image_list[0] if image_list else None
+            video_addr = None
+    
+    # 处理标签
+    tags_temp = data['note_card'].get('tag_list', [])
     tags = []
     for tag in tags_temp:
         try:
             tags.append(tag['name'])
         except:
             pass
+    
+    # 处理上传时间
     upload_time = timestamp_to_str(data['note_card']['time'])
+    
+    # 处理IP位置
     if 'ip_location' in data['note_card']:
         ip_location = data['note_card']['ip_location']
     else:
         ip_location = '未知'
-    return {
+    
+    # 构建返回数据
+    result = {
         'note_id': note_id,
         'note_url': note_url,
         'note_type': note_type,
@@ -126,11 +287,15 @@ def handle_note_info(data):
         'share_count': share_count,
         'video_cover': video_cover,
         'video_addr': video_addr,
+        'video_duration': video_duration,  # 新增：视频时长
+        'video_streams': video_streams,  # 新增：所有可用的视频流
         'image_list': image_list,
         'tags': tags,
         'upload_time': upload_time,
         'ip_location': ip_location,
     }
+    
+    return result
 
 def handle_comment_info(data):
     note_id = data['note_id']
@@ -248,6 +413,14 @@ def save_note_detail(note, path):
 
 @retry(tries=3, delay=1)
 def download_note(note_info, path, save_choice):
+    handle_info_dir = os.path.abspath('download_note_info')
+    os.makedirs(handle_info_dir, exist_ok=True)
+
+    handle_path = os.path.join(handle_info_dir, f'note_{1}.json')
+    with open(handle_path, 'w', encoding='utf-8') as f:
+        json.dump(note_info, f, ensure_ascii=False, indent=2)
+    logger.info(f'笔记信息已保存到 download_note_info: {handle_path}')
+
     note_id = note_info['note_id']
     user_id = note_info['user_id']
     title = note_info['title']

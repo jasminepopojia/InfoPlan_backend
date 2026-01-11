@@ -1,7 +1,6 @@
 # encoding: utf-8
 """
-小红书爬虫API服务（整合版）
-部署在服务器A，负责所有数据获取功能
+小红书爬虫API服务，负责所有数据获取功能
 """
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -9,7 +8,6 @@ from loguru import logger
 from apis.xhs_pc_apis import XHS_Apis
 from xhs_utils.common_util import load_env
 from xhs_utils.note_fetcher import NoteFetcher
-from typing import Optional
 
 app = Flask(__name__)
 CORS(app)  # 允许跨域请求
@@ -240,56 +238,242 @@ def get_users_notes():
         }), 500
 
 
+# @app.route('/api/user/notes/<user_id>', methods=['GET'])
+# def get_user_notes_single(user_id: str):
+#     """
+#     获取单个用户的所有笔记（简化版）
+#     查询参数:
+#     - limit: 限制返回数量，默认20
+#     """
+#     try:
+#         limit = request.args.get('limit', 20, type=int)
+        
+#         logger.info(f'收到获取用户笔记请求: user_id={user_id}, limit={limit}')
+        
+#         # 构建用户URL
+#         user_url = f"https://www.xiaohongshu.com/user/profile/{user_id}"
+        
+#         # 获取用户所有笔记
+#         success, msg, notes = xhs_apis.get_user_all_notes(user_url, cookies_str)
+        
+#         if success and notes:
+#             # 限制数量
+#             notes = notes[:limit]
+            
+#             # 转换为标准格式
+#             formatted_notes = []
+#             for note_data in notes:
+#                 formatted_notes.append({
+#                     "note_id": note_data.get('note_id', ''),
+#                     "title": note_data.get('display_title', note_data.get('title', '')),
+#                     "desc": note_data.get('desc', ''),
+#                     "type": note_data.get('type', 'normal'),
+#                     "user_id": user_id
+#                 })
+            
+#             return jsonify({
+#                 "success": True,
+#                 "msg": "获取笔记成功",
+#                 "data": {
+#                     "notes": formatted_notes,
+#                     "count": len(formatted_notes)
+#                 }
+#             }), 200
+#         else:
+#             return jsonify({
+#                 "success": False,
+#                 "msg": msg or "获取笔记失败",
+#                 "data": None
+#             }), 500
+            
+#     except Exception as e:
+#         logger.error(f'获取用户笔记接口错误: {str(e)}', exc_info=True)
+#         return jsonify({
+#             "success": False,
+#             "msg": f"服务器错误: {str(e)}",
+#             "data": None
+#         }), 500
+
+
 @app.route('/api/user/notes/<user_id>', methods=['GET'])
 def get_user_notes_single(user_id: str):
     """
-    获取单个用户的所有笔记（简化版）
+    获取单个用户的所有笔记
     查询参数:
     - limit: 限制返回数量，默认20
+    - search_keyword: 可选，用于搜索用户获取xsec_token的关键词
     """
     try:
         limit = request.args.get('limit', 20, type=int)
+        search_keyword = request.args.get('search_keyword', None)
         
         logger.info(f'收到获取用户笔记请求: user_id={user_id}, limit={limit}')
         
         # 构建用户URL
         user_url = f"https://www.xiaohongshu.com/user/profile/{user_id}"
         
-        # 获取用户所有笔记
-        success, msg, notes = xhs_apis.get_user_all_notes(user_url, cookies_str)
+        # 如果提供了搜索关键词，尝试获取完整URL（包含xsec_token）
+        if search_keyword:
+            try:
+                # 搜索用户获取xsec_token
+                success_search, msg_search, res_json = xhs_apis.search_user(
+                    search_keyword, cookies_str, page=1
+                )
+                if success_search and res_json:
+                    users = res_json.get('data', {}).get('users', [])
+                    for user in users:
+                        if user.get('id') == user_id:
+                            xsec_token = user.get('xsec_token', '')
+                            if xsec_token:
+                                user_url = f"https://www.xiaohongshu.com/user/profile/{user_id}?xsec_token={xsec_token}&xsec_source=pc_search"
+                                logger.info(f"✅ 通过搜索获取到完整URL")
+                                break
+            except Exception as e:
+                logger.warning(f"搜索用户获取token失败: {e}，将使用基础URL")
         
-        if success and notes:
-            # 限制数量
-            notes = notes[:limit]
+        # 获取用户所有笔记
+        success, msg, all_note_info = xhs_apis.get_user_all_notes(user_url, cookies_str)
+        
+        if success:
+            logger.info(f'用户 {user_id} 作品数量: {len(all_note_info)}')
             
-            # 转换为标准格式
+            # 限制数量
+            all_note_info = all_note_info[:limit]
+            
+            # 转换为标准格式（按照main.py的方式遍历）
             formatted_notes = []
-            for note_data in notes:
-                formatted_notes.append({
-                    "note_id": note_data.get('note_id', ''),
-                    "title": note_data.get('display_title', note_data.get('title', '')),
-                    "desc": note_data.get('desc', ''),
-                    "type": note_data.get('type', 'normal'),
-                    "user_id": user_id
-                })
+            for simple_note_info in all_note_info:
+                try:
+                    # 按照main.py的方式获取字段
+                    note_id = simple_note_info.get('note_id', '')
+                    xsec_token = simple_note_info.get('xsec_token', '')
+                    
+                    if note_id:
+                        formatted_notes.append({
+                            "note_id": note_id,
+                            "title": simple_note_info.get('display_title', simple_note_info.get('title', '无标题')),
+                            "desc": simple_note_info.get('desc', ''),
+                            "type": simple_note_info.get('type', 'normal'),
+                            "user_id": user_id,
+                            "xsec_token": xsec_token,
+                            "note_url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}&xsec_source=pc_user" if xsec_token else f"https://www.xiaohongshu.com/explore/{note_id}"
+                        })
+                except Exception as e:
+                    logger.warning(f'处理笔记数据时出错: {e}')
+                    continue
             
             return jsonify({
                 "success": True,
                 "msg": "获取笔记成功",
                 "data": {
                     "notes": formatted_notes,
-                    "count": len(formatted_notes)
+                    "count": len(formatted_notes),
+                    "total": len(all_note_info) if isinstance(all_note_info, list) else 0
                 }
             }), 200
         else:
             return jsonify({
                 "success": False,
                 "msg": msg or "获取笔记失败",
-                "data": None
+                "data": None,
+                "hint": "提示：可以尝试提供search_keyword参数来获取xsec_token"
             }), 500
             
     except Exception as e:
         logger.error(f'获取用户笔记接口错误: {str(e)}', exc_info=True)
+        return jsonify({
+            "success": False,
+            "msg": f"服务器错误: {str(e)}",
+            "data": None
+        }), 500
+
+
+# 获取用户完整url的user_url
+
+@app.route('/api/user/url/<user_id>', methods=['GET'])
+def get_user_url_with_token(user_id: str):
+    """
+    通过用户ID获取包含xsec_token的完整URL
+    查询参数:
+    - search_keyword: 搜索关键词（用于搜索用户）
+    """
+    try:
+        search_keyword = request.args.get('search_keyword', None)
+        
+        logger.info(f'收到获取用户URL请求: user_id={user_id}')
+        
+        # 基础URL
+        base_url = f"https://www.xiaohongshu.com/user/profile/{user_id}"
+        
+        # 如果提供了搜索关键词，尝试获取完整URL
+        if search_keyword:
+            try:
+                success, msg, res_json = xhs_apis.search_user(
+                    search_keyword, cookies_str, page=1
+                )
+                
+                if success and res_json:
+                    users = res_json.get('data', {}).get('users', [])
+                    
+                    # 查找匹配的用户
+                    for user in users:
+                        if user.get('id') == user_id:
+                            xsec_token = user.get('xsec_token', '')
+                            if xsec_token:
+                                full_url = f"{base_url}?xsec_token={xsec_token}&xsec_source=pc_search"
+                                return jsonify({
+                                    "success": True,
+                                    "msg": "获取完整URL成功",
+                                    "data": {
+                                        "user_id": user_id,
+                                        "base_url": base_url,
+                                        "full_url": full_url,
+                                        "xsec_token": xsec_token
+                                    }
+                                }), 200
+                    
+                    return jsonify({
+                        "success": False,
+                        "msg": "未在搜索结果中找到该用户",
+                        "data": {
+                            "user_id": user_id,
+                            "base_url": base_url
+                        }
+                    }), 404
+                else:
+                    return jsonify({
+                        "success": False,
+                        "msg": f"搜索失败: {msg}",
+                        "data": {
+                            "user_id": user_id,
+                            "base_url": base_url
+                        }
+                    }), 500
+            except Exception as e:
+                logger.error(f"搜索用户失败: {e}")
+                return jsonify({
+                    "success": False,
+                    "msg": f"搜索用户时出错: {str(e)}",
+                    "data": {
+                        "user_id": user_id,
+                        "base_url": base_url
+                    }
+                }), 500
+        else:
+            # 没有提供搜索关键词，返回基础URL
+            return jsonify({
+                "success": True,
+                "msg": "返回基础URL（未提供search_keyword）",
+                "data": {
+                    "user_id": user_id,
+                    "base_url": base_url,
+                    "full_url": base_url,
+                    "hint": "可以提供search_keyword参数来获取包含xsec_token的完整URL"
+                }
+            }), 200
+            
+    except Exception as e:
+        logger.error(f'获取用户URL接口错误: {str(e)}', exc_info=True)
         return jsonify({
             "success": False,
             "msg": f"服务器错误: {str(e)}",

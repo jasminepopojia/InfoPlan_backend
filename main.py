@@ -20,10 +20,19 @@ class Data_Spider():
         note_info = None
         try:
             success, msg, note_info = self.xhs_apis.get_note_info(note_url, cookies_str, proxies)
+            import json
+            note_info_json_path = os.path.abspath(os.path.join(base_path['excel'], f'{note_url.split("/")[-1].split("?")[0]}_note_info.json'))
+            with open(note_info_json_path, 'w', encoding='utf-8') as f:
+                json.dump(note_info, f, ensure_ascii=False, indent=2)
+            logger.info(f'笔记信息已保存到: {note_info_json_path},{success},{msg}')
             if success:
                 note_info = note_info['data']['items'][0]
                 note_info['url'] = note_url
                 note_info = handle_note_info(note_info)
+                handle_note_info_json_path = os.path.abspath(os.path.join(base_path['excel'], f'{note_url.split("/")[-1].split("?")[0]}_handle_note_info.json'))
+                with open(handle_note_info_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(note_info, f, ensure_ascii=False, indent=2)
+                logger.info(f'handle_note_info笔记信息已保存到: {handle_note_info_json_path}')
         except Exception as e:
             success = False
             msg = e
@@ -63,7 +72,12 @@ class Data_Spider():
         """
         note_list = []
         try:
-            success, msg, all_note_info = self.xhs_apis.get_user_all_notes(user_url, cookies_str, proxies)
+            success, msg, all_note_info = self.xhs_apis.get_user_latest_notes(user_url, cookies_str, limit = 5,proxies=proxies)
+            import json
+            user_notes_json_path = os.path.abspath(os.path.join(base_path['excel'], f'{user_url.split("/")[-1].split("?")[0]}_all_notes.json'))
+            with open(user_notes_json_path, 'w', encoding='utf-8') as f:
+                json.dump(all_note_info, f, ensure_ascii=False, indent=2)
+            logger.info(f'用户 {user_url} 笔记信息已保存到: {user_notes_json_path}')
             if success:
                 logger.info(f'用户 {user_url} 作品数量: {len(all_note_info)}')
                 for simple_note_info in all_note_info:
@@ -125,102 +139,102 @@ if __name__ == '__main__':
         save_choice 为 excel 或者 all 时，excel_name 不能为空
     """
 
-# ========== 测试搜索用户接口 ==========
-logger.info("=" * 50)
-logger.info("开始测试搜索用户接口")
-logger.info("=" * 50)
+    # # ========== 测试搜索用户接口 ==========
+    # logger.info("=" * 50)
+    # logger.info("开始测试搜索用户接口")
+    # logger.info("=" * 50)
 
-# 测试搜索用户（单页）
-search_query = "美食"
-page = 1
-logger.info(f"搜索关键词: {search_query}, 页码: {page}")
+    # # 测试搜索用户（单页）
+    # search_query = "美食"
+    # page = 1
+    # logger.info(f"搜索关键词: {search_query}, 页码: {page}")
 
-success, msg, res_json = data_spider.xhs_apis.search_user(search_query, cookies_str, page)
+    # success, msg, res_json = data_spider.xhs_apis.search_user(search_query, cookies_str, page)
 
-if success:
-    logger.info(f"搜索成功！消息: {msg}")
-    if res_json and 'data' in res_json:
-        # 正确的数据路径：res_json['data']['users']
-        users = res_json['data'].get('users', [])
-        logger.info(f"找到 {len(users)} 个用户")
-        
-        # 打印前几个用户的信息（使用正确的字段名）
-        for i, user in enumerate(users[:3], 1):
-            logger.info(f"用户 {i}:")
-            logger.info(f"  - 用户ID: {user.get('id', 'N/A')}")
-            logger.info(f"  - 昵称: {user.get('name', 'N/A')}")
-            logger.info(f"  - 小红书号: {user.get('red_id', 'N/A')}")
-            logger.info(f"  - 简介: {user.get('sub_title', 'N/A')}")
-            logger.info(f"  - 粉丝数: {user.get('fans', 'N/A')}")
-            logger.info(f"  - 笔记数: {user.get('note_count', 'N/A')}")
-            logger.info(f"  - 更新时间: {user.get('update_time', 'N/A')}")
-            logger.info(f"  - 是否已关注: {'是' if user.get('followed', False) else '否'}")
-            logger.info(f"  - 头像: {user.get('image', 'N/A')}")
-            logger.info("-" * 30)
-    else:
-        logger.warning("返回数据格式异常")
-        if res_json:
-            logger.warning(f"返回数据: {res_json}")
-else:
-    logger.error(f"搜索失败: {msg}")
-
-logger.info("=" * 50)
-
-# 测试批量搜索用户（获取指定数量的用户）
-logger.info("开始测试批量搜索用户接口")
-logger.info("=" * 50)
-
-require_num = 20
-logger.info(f"搜索关键词: {search_query}, 需要数量: {require_num}")
-
-success, msg, user_list = data_spider.xhs_apis.search_some_user(search_query, require_num, cookies_str)
-
-if success:
-    logger.info(f"批量搜索成功！消息: {msg}")
-    logger.info(f"共获取 {len(user_list)} 个用户")
-    
-    # 打印用户统计信息（使用正确的字段名）
-    if user_list:
-        logger.info("\n用户列表预览（前5个）:")
-        for i, user in enumerate(user_list[:5], 1):
-            user_id = user.get('id', 'N/A')
-            user_name = user.get('name', 'N/A')
-            user_fans = user.get('fans', 'N/A')
-            user_notes = user.get('note_count', 'N/A')
-            logger.info(f"{i}. {user_name} (ID: {user_id}, 粉丝: {user_fans}, 笔记: {user_notes})")
-        
-        # 统计信息
-        logger.info("\n统计信息:")
-        total_followed = sum(1 for user in user_list if user.get('followed', False))
-        logger.info(f"  - 已关注用户数: {total_followed}")
-        logger.info(f"  - 未关注用户数: {len(user_list) - total_followed}")
-        
-        # 粉丝数统计（尝试解析）
-        try:
-            fans_list = []
-            for user in user_list:
-                fans_str = user.get('fans', '0')
-                if '万' in fans_str:
-                    fans_num = float(fans_str.replace('万', '')) * 10000
-                else:
-                    fans_num = float(fans_str) if fans_str.replace('.', '').isdigit() else 0
-                fans_list.append(fans_num)
+    # if success:
+    #     logger.info(f"搜索成功！消息: {msg}")
+    #     if res_json and 'data' in res_json:
+    #         # 正确的数据路径：res_json['data']['users']
+    #         users = res_json['data'].get('users', [])
+    #         logger.info(f"找到 {len(users)} 个用户")
             
-            if fans_list:
-                avg_fans = sum(fans_list) / len(fans_list)
-                max_fans = max(fans_list)
-                min_fans = min(fans_list)
-                logger.info(f"  - 平均粉丝数: {avg_fans/10000:.2f}万")
-                logger.info(f"  - 最多粉丝数: {max_fans/10000:.2f}万")
-                logger.info(f"  - 最少粉丝数: {min_fans/10000:.2f}万")
-        except Exception as e:
-            logger.warning(f"粉丝数统计失败: {e}")
-else:
-    logger.error(f"批量搜索失败: {msg}")
+    #         # 打印前几个用户的信息（使用正确的字段名）
+    #         for i, user in enumerate(users[:3], 1):
+    #             logger.info(f"用户 {i}:")
+    #             logger.info(f"  - 用户ID: {user.get('id', 'N/A')}")
+    #             logger.info(f"  - 昵称: {user.get('name', 'N/A')}")
+    #             logger.info(f"  - 小红书号: {user.get('red_id', 'N/A')}")
+    #             logger.info(f"  - 简介: {user.get('sub_title', 'N/A')}")
+    #             logger.info(f"  - 粉丝数: {user.get('fans', 'N/A')}")
+    #             logger.info(f"  - 笔记数: {user.get('note_count', 'N/A')}")
+    #             logger.info(f"  - 更新时间: {user.get('update_time', 'N/A')}")
+    #             logger.info(f"  - 是否已关注: {'是' if user.get('followed', False) else '否'}")
+    #             logger.info(f"  - 头像: {user.get('image', 'N/A')}")
+    #             logger.info("-" * 30)
+    #     else:
+    #         logger.warning("返回数据格式异常")
+    #         if res_json:
+    #             logger.warning(f"返回数据: {res_json}")
+    # else:
+    #     logger.error(f"搜索失败: {msg}")
 
-logger.info("=" * 50)
-logger.info("搜索用户接口测试完成")
-logger.info("=" * 50)
+    # logger.info("=" * 50)
+
+    # # 测试批量搜索用户（获取指定数量的用户）
+    # logger.info("开始测试批量搜索用户接口")
+    # logger.info("=" * 50)
+
+    # require_num = 20
+    # logger.info(f"搜索关键词: {search_query}, 需要数量: {require_num}")
+
+    # success, msg, user_list = data_spider.xhs_apis.search_some_user(search_query, require_num, cookies_str)
+
+    # if success:
+    #     logger.info(f"批量搜索成功！消息: {msg}")
+    #     logger.info(f"共获取 {len(user_list)} 个用户")
+        
+    #     # 打印用户统计信息（使用正确的字段名）
+    #     if user_list:
+    #         logger.info("\n用户列表预览（前5个）:")
+    #         for i, user in enumerate(user_list[:5], 1):
+    #             user_id = user.get('id', 'N/A')
+    #             user_name = user.get('name', 'N/A')
+    #             user_fans = user.get('fans', 'N/A')
+    #             user_notes = user.get('note_count', 'N/A')
+    #             logger.info(f"{i}. {user_name} (ID: {user_id}, 粉丝: {user_fans}, 笔记: {user_notes})")
+            
+    #         # 统计信息
+    #         logger.info("\n统计信息:")
+    #         total_followed = sum(1 for user in user_list if user.get('followed', False))
+    #         logger.info(f"  - 已关注用户数: {total_followed}")
+    #         logger.info(f"  - 未关注用户数: {len(user_list) - total_followed}")
+            
+    #         # 粉丝数统计（尝试解析）
+    #         try:
+    #             fans_list = []
+    #             for user in user_list:
+    #                 fans_str = user.get('fans', '0')
+    #                 if '万' in fans_str:
+    #                     fans_num = float(fans_str.replace('万', '')) * 10000
+    #                 else:
+    #                     fans_num = float(fans_str) if fans_str.replace('.', '').isdigit() else 0
+    #                 fans_list.append(fans_num)
+                
+    #             if fans_list:
+    #                 avg_fans = sum(fans_list) / len(fans_list)
+    #                 max_fans = max(fans_list)
+    #                 min_fans = min(fans_list)
+    #                 logger.info(f"  - 平均粉丝数: {avg_fans/10000:.2f}万")
+    #                 logger.info(f"  - 最多粉丝数: {max_fans/10000:.2f}万")
+    #                 logger.info(f"  - 最少粉丝数: {min_fans/10000:.2f}万")
+    #         except Exception as e:
+    #             logger.warning(f"粉丝数统计失败: {e}")
+    # else:
+    #     logger.error(f"批量搜索失败: {msg}")
+
+    # logger.info("=" * 50)
+    # logger.info("搜索用户接口测试完成")
+    # logger.info("=" * 50)
 
     # # ========== 测试获取用户信息接口 ==========
     # logger.info("\n" + "=" * 50)
@@ -289,8 +303,8 @@ logger.info("=" * 50)
     #     if res_json:
     #         logger.info(f"返回内容: {res_json}")
     
-    # # 测试3: 获取指定用户的信息 (get_user_info)
-    # # 先从搜索结果中获取一个 user_id，或者使用一个示例 user_id
+    # 测试3: 获取指定用户的信息 (get_user_info)
+    # 先从搜索结果中获取一个 user_id，或者使用一个示例 user_id
     # logger.info("\n" + "-" * 50)
     # logger.info("【测试3】获取指定用户的信息 (get_user_info)")
     # logger.info("-" * 50)
@@ -301,12 +315,14 @@ logger.info("=" * 50)
     # logger.info(f"先搜索关键词 '{search_query_for_user}' 获取一个用户ID...")
     
     # success, msg, search_res = data_spider.xhs_apis.search_user(search_query_for_user, cookies_str, page=1)
+    # logger.info("\n📄 完整返回数据:")
+    # logger.info(json.dumps(search_res, ensure_ascii=False, indent=2))
     # if success and search_res and 'data' in search_res:
     #     users = search_res['data'].get('users', [])
     #     if users:
-    #         test_user_id = users[0].get('user_id')
+    #         test_user_id = users[0].get('id')
     #         logger.info(f"✅ 找到用户ID: {test_user_id}")
-    #         logger.info(f"   用户昵称: {users[0].get('nickname', 'N/A')}")
+    #         logger.info(f"   用户昵称: {users[0].get('name', 'N/A')}")
     #     else:
     #         logger.warning("⚠️ 搜索结果中没有找到用户，将使用示例 user_id")
     #         test_user_id = "64c3f392000000002b009e45"  # 示例 user_id
@@ -448,9 +464,10 @@ logger.info("=" * 50)
     # ]
     # data_spider.spider_some_note(notes, cookies_str, base_path, 'all', 'test')
 
-    # # 2 爬取用户的所有笔记信息 用户链接 如下所示 注意此url会过期！
+    # 2 爬取用户的所有笔记信息 用户链接 如下所示 注意此url会过期！
     # user_url = 'https://www.xiaohongshu.com/user/profile/64c3f392000000002b009e45?xsec_token=AB-GhAToFu07JwNk_AMICHnp7bSTjVz2beVIDBwSyPwvM=&xsec_source=pc_feed'
-    # data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all')
+    user_url = 'https://www.xiaohongshu.com/user/profile/5fcc82fa000000000101dc00?xsec_token=ABpui90HV_J-zs9tYIk6ITzTsoz_co3aHcSneR8ykIaT8=&xsec_source=pc_feed'
+    data_spider.spider_user_all_note(user_url, cookies_str, base_path, 'all')
 
     # # 3 搜索指定关键词的笔记
     # query = "榴莲"

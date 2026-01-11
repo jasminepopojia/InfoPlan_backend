@@ -224,6 +224,79 @@ class XHS_Apis():
             success = False
             msg = str(e)
         return success, msg, note_list
+    
+    def get_user_latest_notes(self, user_url: str, cookies_str: str, limit: int = 5, proxies: dict = None):
+        """
+        获取用户最新的前N条笔记（优化版，只获取需要的数量）
+        :param user_url: 用户完整URL（包含xsec_token）
+        :param cookies_str: 你的cookies
+        :param limit: 需要获取的笔记数量，默认5条
+        :param proxies: 代理设置（可选）
+        :return: (success, msg, note_list) 返回最新的前N条笔记
+        """
+        cursor = ''
+        note_list = []
+        try:
+            # 解析用户URL，提取user_id和xsec_token
+            urlParse = urllib.parse.urlparse(user_url)
+            user_id = urlParse.path.split("/")[-1]
+            
+            # 解析查询参数
+            kvs = urlParse.query.split('&') if urlParse.query else []
+            kvDist = {}
+            for kv in kvs:
+                if '=' in kv:
+                    key, value = kv.split('=', 1)
+                    kvDist[key] = value
+            
+            xsec_token = kvDist.get('xsec_token', '')
+            xsec_source = kvDist.get('xsec_source', 'pc_search')
+            
+            # 只获取需要的数量，不需要获取所有笔记
+            while len(note_list) < limit:
+                success, msg, res_json = self.get_user_note_info(
+                    user_id, cursor, cookies_str, xsec_token, xsec_source, proxies
+                )
+                
+                if not success:
+                    raise Exception(msg)
+                
+                notes = res_json.get("data", {}).get("notes", [])
+                
+                if not notes:
+                    # 没有更多笔记了
+                    break
+                
+                # 添加笔记到列表
+                note_list.extend(notes)
+                
+                # 如果已经获取足够的笔记，停止
+                if len(note_list) >= limit:
+                    # 只保留前limit条
+                    note_list = note_list[:limit]
+                    break
+                
+                # 检查是否还有更多笔记
+                if not res_json.get("data", {}).get("has_more", False):
+                    # 没有更多了
+                    break
+                
+                # 更新cursor，准备获取下一页
+                if 'cursor' in res_json.get("data", {}):
+                    cursor = str(res_json["data"]["cursor"])
+                else:
+                    # 没有cursor了，停止
+                    break
+            
+            success = True
+            msg = f"成功获取 {len(note_list)} 条笔记"
+            
+        except Exception as e:
+            success = False
+            msg = str(e)
+            note_list = []
+        
+        return success, msg, note_list
 
     def get_user_like_note_info(self, user_id: str, cursor: str, cookies_str: str, xsec_token='', xsec_source='', proxies: dict = None):
         """
@@ -360,6 +433,8 @@ class XHS_Apis():
             返回笔记的详细
         """
         res_json = None
+        success = True 
+        msg = "" 
         try:
             urlParse = urllib.parse.urlparse(url)
             note_id = urlParse.path.split("/")[-1]
@@ -382,7 +457,6 @@ class XHS_Apis():
             headers, cookies, data = generate_request_params(cookies_str, api, data, 'POST')
             response = requests.post(self.base_url + api, headers=headers, data=data, cookies=cookies, proxies=proxies)
             res_json = response.json()
-            success, msg = res_json["success"], res_json["msg"]
         except Exception as e:
             success = False
             msg = str(e)
